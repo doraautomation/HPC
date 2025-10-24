@@ -7,5 +7,7 @@ This project compares a **sequential** K-Means implementation with a **parallel,
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
-2. Run the script:
+
+## Execution
+Run the script:
    python Part-1.py
