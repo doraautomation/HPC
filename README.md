@@ -9,5 +9,5 @@ This project compares a **sequential** K-Means implementation with a **parallel,
    pip install -r requirements.txt
 
 ## Execution
-Run the script:
+1. Run the script:
    python Part-1.py
