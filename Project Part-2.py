@@ -1,8 +1,6 @@
-# Save this as 'gpu_vectorize.py'
-
 import pandas as pd
 import numpy as np
-from numba import cuda # Requires Numba and a CUDA-enabled NVIDIA GPU
+from numba import cuda
 import math
 import time # <<< ADDED: Import time module
 from typing import List, Dict
@@ -20,7 +18,7 @@ METADATA_FEATURES = {
 THREADS_PER_BLOCK = 128
 # ---------------------
 
-# --- CPU Feature Engineering Functions ---
+# --- CPU Feature Functions ---
 
 def vectorize_metadata_cpu(df: pd.DataFrame) -> np.ndarray:
     """
@@ -28,21 +26,21 @@ def vectorize_metadata_cpu(df: pd.DataFrame) -> np.ndarray:
     This runs on the CPU, as pandas/string manipulation is inefficient on the GPU.
     """
     
-    # 1. Imputation (Age)
+    # Imputation (Age)
     df['age'] = df['age'].fillna(df['age'].mean())
     
-    # 2. Imputation (Categorical)
+    # Imputation (Categorical)
     for col in METADATA_FEATURES['categorical']:
         df[col] = df[col].fillna('MISSING')
 
-    # 3. One-Hot Encoding (OHE)
+    # One-Hot Encoding (OHE)
     ohe_df = pd.get_dummies(
         df[METADATA_FEATURES['categorical']],
         columns=METADATA_FEATURES['categorical'],
         dtype=np.float32
     )
 
-    # 4. Concatenate Numerical and OHE features
+    # Concatenate Numerical and OHE features
     numerical_df = df[METADATA_FEATURES['numerical']].astype(np.float32)
     
     # Final metadata array
@@ -50,12 +48,12 @@ def vectorize_metadata_cpu(df: pd.DataFrame) -> np.ndarray:
     
     return metadata_array
 
-# --- Numba CUDA Kernel (The GPU Parallel Part) ---
+# --- Numba CUDA Kernel ---
 
 @cuda.jit
 def gpu_vectorize_image_and_combine(
-    metadata_vec_gpu,    # D_in: Metadata vectors from CPU
-    combined_vec_gpu,    # D_out: Final combined vectors
+    metadata_vec_gpu,    
+    combined_vec_gpu,    
     num_rows,
     image_vector_size,
     metadata_vector_size
@@ -67,13 +65,13 @@ def gpu_vectorize_image_and_combine(
     row_idx = cuda.grid(1)
 
     if row_idx < num_rows:
-        # --- 1. Simulate Image Vectorization on GPU ---
+        # ---  Simulate Image Vectorization on GPU ---
         start_img = row_idx * (image_vector_size + metadata_vector_size) 
         
         for i in range(image_vector_size):
             combined_vec_gpu[start_img + i] = (row_idx + i) % 255 / 255.0
 
-        # --- 2. Combine with Metadata Vector ---
+        # ---  Combine with Metadata Vector ---
         start_meta = start_img + image_vector_size
         start_meta_in = row_idx * metadata_vector_size
         
@@ -88,7 +86,7 @@ def main():
         print(f"Error: Metadata file '{CSV_FILE}' not found. Aborting.")
         return
 
-    # --- 1. CPU Pre-processing and Metadata Vectorization (Serial) ---
+    # --- 1. CPU Pre-processing and Metadata Vectorization ---
     print("Pre-processing metadata on CPU...")
     metadata_array_cpu = vectorize_metadata_cpu(df.copy())
     
@@ -105,14 +103,12 @@ def main():
     blocks_per_grid = math.ceil(num_rows / THREADS_PER_BLOCK)
     total_vector_size = IMAGE_VECTOR_SIZE + metadata_vector_size
     
-    # <<< WALL CLOCK TIME START >>>
     start_time = time.time()
     
-    # a. Allocate device memory and transfer input
     metadata_vec_gpu = cuda.to_device(metadata_array_cpu.flatten())
     combined_vec_gpu = cuda.device_array(num_rows * total_vector_size, dtype=np.float32)
 
-    # b. Launch the kernel
+    # Launch the kernel
     print(f"Launching kernel with {blocks_per_grid} blocks and {THREADS_PER_BLOCK} threads/block.")
     gpu_vectorize_image_and_combine[blocks_per_grid, THREADS_PER_BLOCK](
         metadata_vec_gpu, 
@@ -122,17 +118,16 @@ def main():
         metadata_vector_size
     )
     
-    # c. Transfer the results back to the host (CPU)
+    # Transfer the results back to the host (CPU)
     final_vector_data = combined_vec_gpu.copy_to_host()
     
-    # <<< WALL CLOCK TIME END & CALCULATION >>>
     end_time = time.time()
     total_time = end_time - start_time
 
     # Reshape
     final_vector_data = final_vector_data.reshape(num_rows, total_vector_size)
 
-    # --- 3. Save Output ---
+    # ---  Save Output ---
     print("\n" + "="*50)
     print("GPU Vectorization complete.")
     print(f"Total vectors created: {len(final_vector_data)}")
@@ -140,7 +135,7 @@ def main():
     # <<< ADDED: Print Execution Time >>>
     print(f"Execution Time (Wall Clock, GPU steps): {total_time:.4f} seconds.")
     
-    # Save the resulting vectors to a CSV file
+    # Save the vectors to a CSV file
     vector_df = pd.DataFrame(final_vector_data)
     vector_df.to_csv(OUTPUT_CSV_FILE, index=False, header=False)
     
